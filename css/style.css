@@ -1860,7 +1860,7 @@ button
 }
 .header__btn
 {
-    position: relative;
+    position: fixed;
 
     display: inline-block;
 
@@ -1873,6 +1873,7 @@ button
     color: rgba(169, 101, 102, .8);
     border: 2px solid rgba(169, 101, 102, .5);
     border-radius: 22px;
+    background-color: rgba(255, 255, 255, .3);
 }
 .header__btn:before
 {
@@ -1907,6 +1908,7 @@ button
 }
 .header__btn--next
 {
+    margin-left: 207px;
     padding-right: 40px;
 }
 .header__btn--next:before
@@ -1925,6 +1927,7 @@ button
 
     color: #a96566;
     border: 2px solid #a96566;
+    background-color: rgba(255, 255, 255, .8);
 }
 .header__btn:hover:before
 {
