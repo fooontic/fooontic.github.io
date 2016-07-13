@@ -1,5 +1,5 @@
 /*!
- * jQuery JavaScript Library v2.2.2
+ * jQuery JavaScript Library v2.2.3
  * http://jquery.com/
  *
  * Includes Sizzle.js
@@ -9,7 +9,7 @@
  * Released under the MIT license
  * http://jquery.org/license
  *
- * Date: 2016-03-17T17:51Z
+ * Date: 2016-04-05T19:26Z
  */
 
 (function( global, factory ) {
@@ -65,7 +65,7 @@ var support = {};
 
 
 var
-	version = "2.2.2",
+	version = "2.2.3",
 
 	// Define a local copy of jQuery
 	jQuery = function( selector, context ) {
@@ -9475,7 +9475,7 @@ jQuery.fn.load = function( url, params, callback ) {
 		// If it fails, this function gets "jqXHR", "status", "error"
 		} ).always( callback && function( jqXHR, status ) {
 			self.each( function() {
-				callback.apply( self, response || [ jqXHR.responseText, status, jqXHR ] );
+				callback.apply( this, response || [ jqXHR.responseText, status, jqXHR ] );
 			} );
 		} );
 	}
@@ -10349,6 +10349,1268 @@ return jQuery;
   })();
 
 }).call(this);
+/**
+ * vivus - JavaScript library to make drawing animation on SVG
+ * @version v0.3.1
+ * @link https://github.com/maxwellito/vivus
+ * @license MIT
+ */
+
+'use strict';
+
+(function (window, document) {
+
+  'use strict';
+
+/**
+ * Pathformer
+ * Beta version
+ *
+ * Take any SVG version 1.1 and transform
+ * child elements to 'path' elements
+ *
+ * This code is purely forked from
+ * https://github.com/Waest/SVGPathConverter
+ */
+
+/**
+ * Class constructor
+ *
+ * @param {DOM|String} element Dom element of the SVG or id of it
+ */
+function Pathformer(element) {
+  // Test params
+  if (typeof element === 'undefined') {
+    throw new Error('Pathformer [constructor]: "element" parameter is required');
+  }
+
+  // Set the element
+  if (element.constructor === String) {
+    element = document.getElementById(element);
+    if (!element) {
+      throw new Error('Pathformer [constructor]: "element" parameter is not related to an existing ID');
+    }
+  }
+  if (element.constructor instanceof window.SVGElement || /^svg$/i.test(element.nodeName)) {
+    this.el = element;
+  } else {
+    throw new Error('Pathformer [constructor]: "element" parameter must be a string or a SVGelement');
+  }
+
+  // Start
+  this.scan(element);
+}
+
+/**
+ * List of tags which can be transformed
+ * to path elements
+ *
+ * @type {Array}
+ */
+Pathformer.prototype.TYPES = ['line', 'ellipse', 'circle', 'polygon', 'polyline', 'rect'];
+
+/**
+ * List of attribute names which contain
+ * data. This array list them to check if
+ * they contain bad values, like percentage. 
+ *
+ * @type {Array}
+ */
+Pathformer.prototype.ATTR_WATCH = ['cx', 'cy', 'points', 'r', 'rx', 'ry', 'x', 'x1', 'x2', 'y', 'y1', 'y2'];
+
+/**
+ * Finds the elements compatible for transform
+ * and apply the liked method
+ *
+ * @param  {object} options Object from the constructor
+ */
+Pathformer.prototype.scan = function (svg) {
+  var fn, element, pathData, pathDom,
+    elements = svg.querySelectorAll(this.TYPES.join(','));
+  for (var i = 0; i < elements.length; i++) {
+    element = elements[i];
+    fn = this[element.tagName.toLowerCase() + 'ToPath'];
+    pathData = fn(this.parseAttr(element.attributes));
+    pathDom = this.pathMaker(element, pathData);
+    element.parentNode.replaceChild(pathDom, element);
+  }
+};
+
+
+/**
+ * Read `line` element to extract and transform
+ * data, to make it ready for a `path` object.
+ *
+ * @param  {DOMelement} element Line element to transform
+ * @return {object}             Data for a `path` element
+ */
+Pathformer.prototype.lineToPath = function (element) {
+  var newElement = {};
+  newElement.d = 'M' + element.x1 + ',' + element.y1 + 'L' + element.x2 + ',' + element.y2;
+  return newElement;
+};
+
+/**
+ * Read `rect` element to extract and transform
+ * data, to make it ready for a `path` object.
+ * The radius-border is not taken in charge yet.
+ * (your help is more than welcomed)
+ *
+ * @param  {DOMelement} element Rect element to transform
+ * @return {object}             Data for a `path` element
+ */
+Pathformer.prototype.rectToPath = function (element) {
+  var newElement = {},
+    x = parseFloat(element.x) || 0,
+    y = parseFloat(element.y) || 0,
+    width = parseFloat(element.width) || 0,
+    height = parseFloat(element.height) || 0;
+  newElement.d  = 'M' + x + ' ' + y + ' ';
+  newElement.d += 'L' + (x + width) + ' ' + y + ' ';
+  newElement.d += 'L' + (x + width) + ' ' + (y + height) + ' ';
+  newElement.d += 'L' + x + ' ' + (y + height) + ' Z';
+  return newElement;
+};
+
+/**
+ * Read `polyline` element to extract and transform
+ * data, to make it ready for a `path` object.
+ *
+ * @param  {DOMelement} element Polyline element to transform
+ * @return {object}             Data for a `path` element
+ */
+Pathformer.prototype.polylineToPath = function (element) {
+  var i, path;
+  var newElement = {};
+  var points = element.points.trim().split(' ');
+  
+  // Reformatting if points are defined without commas
+  if (element.points.indexOf(',') === -1) {
+    var formattedPoints = [];
+    for (i = 0; i < points.length; i+=2) {
+      formattedPoints.push(points[i] + ',' + points[i+1]);
+    }
+    points = formattedPoints;
+  }
+
+  // Generate the path.d value
+  path = 'M' + points[0];
+  for(i = 1; i < points.length; i++) {
+    if (points[i].indexOf(',') !== -1) {
+      path += 'L' + points[i];
+    }
+  }
+  newElement.d = path;
+  return newElement;
+};
+
+/**
+ * Read `polygon` element to extract and transform
+ * data, to make it ready for a `path` object.
+ * This method rely on polylineToPath, because the
+ * logic is similar. The path created is just closed,
+ * so it needs an 'Z' at the end.
+ *
+ * @param  {DOMelement} element Polygon element to transform
+ * @return {object}             Data for a `path` element
+ */
+Pathformer.prototype.polygonToPath = function (element) {
+  var newElement = Pathformer.prototype.polylineToPath(element);
+  newElement.d += 'Z';
+  return newElement;
+};
+
+/**
+ * Read `ellipse` element to extract and transform
+ * data, to make it ready for a `path` object.
+ *
+ * @param  {DOMelement} element ellipse element to transform
+ * @return {object}             Data for a `path` element
+ */
+Pathformer.prototype.ellipseToPath = function (element) {
+  var startX = element.cx - element.rx,
+      startY = element.cy;
+  var endX = parseFloat(element.cx) + parseFloat(element.rx),
+      endY = element.cy;
+
+  var newElement = {};
+  newElement.d = 'M' + startX + ',' + startY +
+                 'A' + element.rx + ',' + element.ry + ' 0,1,1 ' + endX + ',' + endY +
+                 'A' + element.rx + ',' + element.ry + ' 0,1,1 ' + startX + ',' + endY;
+  return newElement;
+};
+
+/**
+ * Read `circle` element to extract and transform
+ * data, to make it ready for a `path` object.
+ *
+ * @param  {DOMelement} element Circle element to transform
+ * @return {object}             Data for a `path` element
+ */
+Pathformer.prototype.circleToPath = function (element) {
+  var newElement = {};
+  var startX = element.cx - element.r,
+      startY = element.cy;
+  var endX = parseFloat(element.cx) + parseFloat(element.r),
+      endY = element.cy;
+  newElement.d =  'M' + startX + ',' + startY +
+                  'A' + element.r + ',' + element.r + ' 0,1,1 ' + endX + ',' + endY +
+                  'A' + element.r + ',' + element.r + ' 0,1,1 ' + startX + ',' + endY;
+  return newElement;
+};
+
+/**
+ * Create `path` elements form original element
+ * and prepared objects
+ *
+ * @param  {DOMelement} element  Original element to transform
+ * @param  {object} pathData     Path data (from `toPath` methods)
+ * @return {DOMelement}          Path element
+ */
+Pathformer.prototype.pathMaker = function (element, pathData) {
+  var i, attr, pathTag = document.createElementNS('http://www.w3.org/2000/svg','path');
+  for(i = 0; i < element.attributes.length; i++) {
+    attr = element.attributes[i];
+    if (this.ATTR_WATCH.indexOf(attr.name) === -1) {
+      pathTag.setAttribute(attr.name, attr.value);
+    }
+  }
+  for(i in pathData) {
+    pathTag.setAttribute(i, pathData[i]);
+  }
+  return pathTag;
+};
+
+/**
+ * Parse attributes of a DOM element to
+ * get an object of attribute => value
+ *
+ * @param  {NamedNodeMap} attributes Attributes object from DOM element to parse
+ * @return {object}                  Object of attributes
+ */
+Pathformer.prototype.parseAttr = function (element) {
+  var attr, output = {};
+  for (var i = 0; i < element.length; i++) {
+    attr = element[i];
+    // Check if no data attribute contains '%', or the transformation is impossible
+    if (this.ATTR_WATCH.indexOf(attr.name) !== -1 && attr.value.indexOf('%') !== -1) {
+      throw new Error('Pathformer [parseAttr]: a SVG shape got values in percentage. This cannot be transformed into \'path\' tags. Please use \'viewBox\'.');
+    }
+    output[attr.name] = attr.value;
+  }
+  return output;
+};
+
+  'use strict';
+
+var requestAnimFrame, cancelAnimFrame, parsePositiveInt;
+
+/**
+ * Vivus
+ * Beta version
+ *
+ * Take any SVG and make the animation
+ * to give give the impression of live drawing
+ *
+ * This in more than just inspired from codrops
+ * At that point, it's a pure fork.
+ */
+
+/**
+ * Class constructor
+ * option structure
+ *   type: 'delayed'|'async'|'oneByOne'|'script' (to know if the item must be drawn asynchronously or not, default: delayed)
+ *   duration: <int> (in frames)
+ *   start: 'inViewport'|'manual'|'autostart' (start automatically the animation, default: inViewport)
+ *   delay: <int> (delay between the drawing of first and last path)
+ *   dashGap <integer> whitespace extra margin between dashes
+ *   pathTimingFunction <function> timing animation function for each path element of the SVG
+ *   animTimingFunction <function> timing animation function for the complete SVG
+ *   forceRender <boolean> force the browser to re-render all updated path items
+ *   selfDestroy <boolean> removes all extra styling on the SVG, and leaves it as original
+ *
+ * The attribute 'type' is by default on 'delayed'.
+ *  - 'delayed'
+ *    all paths are draw at the same time but with a
+ *    little delay between them before start
+ *  - 'async'
+ *    all path are start and finish at the same time
+ *  - 'oneByOne'
+ *    only one path is draw at the time
+ *    the end of the first one will trigger the draw
+ *    of the next one
+ *
+ * All these values can be overwritten individually
+ * for each path item in the SVG
+ * The value of frames will always take the advantage of
+ * the duration value.
+ * If you fail somewhere, an error will be thrown.
+ * Good luck.
+ *
+ * @constructor
+ * @this {Vivus}
+ * @param {DOM|String}   element  Dom element of the SVG or id of it
+ * @param {Object}       options  Options about the animation
+ * @param {Function}     callback Callback for the end of the animation
+ */
+function Vivus (element, options, callback) {
+
+  // Setup
+  this.isReady = false;
+  this.setElement(element, options);
+  this.setOptions(options);
+  this.setCallback(callback);
+
+  if (this.isReady) {
+    this.init();
+  }
+}
+
+/**
+ * Timing functions
+ **************************************
+ *
+ * Default functions to help developers.
+ * It always take a number as parameter (between 0 to 1) then
+ * return a number (between 0 and 1)
+ */
+Vivus.LINEAR          = function (x) {return x;};
+Vivus.EASE            = function (x) {return -Math.cos(x * Math.PI) / 2 + 0.5;};
+Vivus.EASE_OUT        = function (x) {return 1 - Math.pow(1-x, 3);};
+Vivus.EASE_IN         = function (x) {return Math.pow(x, 3);};
+Vivus.EASE_OUT_BOUNCE = function (x) {
+  var base = -Math.cos(x * (0.5 * Math.PI)) + 1,
+    rate = Math.pow(base,1.5),
+    rateR = Math.pow(1 - x, 2),
+    progress = -Math.abs(Math.cos(rate * (2.5 * Math.PI) )) + 1;
+  return (1- rateR) + (progress * rateR);
+};
+
+
+/**
+ * Setters
+ **************************************
+ */
+
+/**
+ * Check and set the element in the instance
+ * The method will not return anything, but will throw an
+ * error if the parameter is invalid
+ *
+ * @param {DOM|String}   element  SVG Dom element or id of it
+ */
+Vivus.prototype.setElement = function (element, options) {
+  // Basic check
+  if (typeof element === 'undefined') {
+    throw new Error('Vivus [constructor]: "element" parameter is required');
+  }
+
+  // Set the element
+  if (element.constructor === String) {
+    element = document.getElementById(element);
+    if (!element) {
+      throw new Error('Vivus [constructor]: "element" parameter is not related to an existing ID');
+    }
+  }
+  this.parentEl = element;
+
+  // Create the object element if the property `file` exists in the options object
+  if (options && options.file) {
+    var objElm = document.createElement('object');
+    objElm.setAttribute('type', 'image/svg+xml');
+    objElm.setAttribute('data', options.file);
+    objElm.setAttribute('built-by-vivus', 'true');
+    element.appendChild(objElm);
+    element = objElm;
+  }
+
+  switch (element.constructor) {
+  case window.SVGSVGElement:
+  case window.SVGElement:
+    this.el = element;
+    this.isReady = true;
+    break;
+
+  case window.HTMLObjectElement:
+    // If we have to wait for it
+    var onLoad, self;
+
+    self = this;
+    onLoad = function (e) {
+      if (self.isReady) {
+        return;
+      }
+      self.el = element.contentDocument && element.contentDocument.querySelector('svg');
+      if (!self.el && e) {
+        throw new Error('Vivus [constructor]: object loaded does not contain any SVG');
+      }
+      else if (self.el) {
+        if (element.getAttribute('built-by-vivus')) {
+          self.parentEl.insertBefore(self.el, element);
+          self.parentEl.removeChild(element);
+          self.el.setAttribute('width', '100%');
+          self.el.setAttribute('height', '100%');
+        }
+        self.isReady = true;
+        self.init();
+        return true;
+      }
+    };
+
+    if (!onLoad()) {
+      element.addEventListener('load', onLoad);
+    }
+    break;
+
+  default:
+    throw new Error('Vivus [constructor]: "element" parameter is not valid (or miss the "file" attribute)');
+  }
+};
+
+/**
+ * Set up user option to the instance
+ * The method will not return anything, but will throw an
+ * error if the parameter is invalid
+ *
+ * @param  {object} options Object from the constructor
+ */
+Vivus.prototype.setOptions = function (options) {
+  var allowedTypes = ['delayed', 'async', 'oneByOne', 'scenario', 'scenario-sync'];
+  var allowedStarts =  ['inViewport', 'manual', 'autostart'];
+
+  // Basic check
+  if (options !== undefined && options.constructor !== Object) {
+    throw new Error('Vivus [constructor]: "options" parameter must be an object');
+  }
+  else {
+    options = options || {};
+  }
+
+  // Set the animation type
+  if (options.type && allowedTypes.indexOf(options.type) === -1) {
+    throw new Error('Vivus [constructor]: ' + options.type + ' is not an existing animation `type`');
+  }
+  else {
+    this.type = options.type || allowedTypes[0];
+  }
+
+  // Set the start type
+  if (options.start && allowedStarts.indexOf(options.start) === -1) {
+    throw new Error('Vivus [constructor]: ' + options.start + ' is not an existing `start` option');
+  }
+  else {
+    this.start = options.start || allowedStarts[0];
+  }
+
+  this.isIE        = (window.navigator.userAgent.indexOf('MSIE') !== -1 || window.navigator.userAgent.indexOf('Trident/') !== -1 || window.navigator.userAgent.indexOf('Edge/') !== -1 );
+  this.duration    = parsePositiveInt(options.duration, 120);
+  this.delay       = parsePositiveInt(options.delay, null);
+  this.dashGap     = parsePositiveInt(options.dashGap, 1);
+  this.forceRender = options.hasOwnProperty('forceRender') ? !!options.forceRender : this.isIE;
+  this.selfDestroy = !!options.selfDestroy;
+  this.onReady     = options.onReady;
+  this.frameLength = this.currentFrame = this.map = this.delayUnit = this.speed = this.handle = null;
+
+  this.ignoreInvisible = options.hasOwnProperty('ignoreInvisible') ? !!options.ignoreInvisible : false;
+
+  this.animTimingFunction = options.animTimingFunction || Vivus.LINEAR;
+  this.pathTimingFunction = options.pathTimingFunction || Vivus.LINEAR;
+
+  if (this.delay >= this.duration) {
+    throw new Error('Vivus [constructor]: delay must be shorter than duration');
+  }
+};
+
+/**
+ * Set up callback to the instance
+ * The method will not return enything, but will throw an
+ * error if the parameter is invalid
+ *
+ * @param  {Function} callback Callback for the animation end
+ */
+Vivus.prototype.setCallback = function (callback) {
+  // Basic check
+  if (!!callback && callback.constructor !== Function) {
+    throw new Error('Vivus [constructor]: "callback" parameter must be a function');
+  }
+  this.callback = callback || function () {};
+};
+
+
+/**
+ * Core
+ **************************************
+ */
+
+/**
+ * Map the svg, path by path.
+ * The method return nothing, it just fill the
+ * `map` array. Each item in this array represent
+ * a path element from the SVG, with informations for
+ * the animation.
+ *
+ * ```
+ * [
+ *   {
+ *     el: <DOMobj> the path element
+ *     length: <number> length of the path line
+ *     startAt: <number> time start of the path animation (in frames)
+ *     duration: <number> path animation duration (in frames)
+ *   },
+ *   ...
+ * ]
+ * ```
+ *
+ */
+Vivus.prototype.mapping = function () {
+  var i, paths, path, pAttrs, pathObj, totalLength, lengthMeter, timePoint;
+  timePoint = totalLength = lengthMeter = 0;
+  paths = this.el.querySelectorAll('path');
+
+  for (i = 0; i < paths.length; i++) {
+    path = paths[i];
+    if (this.isInvisible(path)) {
+      continue;
+    }
+    pathObj = {
+      el: path,
+      length: Math.ceil(path.getTotalLength())
+    };
+    // Test if the path length is correct
+    if (isNaN(pathObj.length)) {
+      if (window.console && console.warn) {
+        console.warn('Vivus [mapping]: cannot retrieve a path element length', path);
+      }
+      continue;
+    }
+    this.map.push(pathObj);
+    path.style.strokeDasharray  = pathObj.length + ' ' + (pathObj.length + this.dashGap * 2);
+    path.style.strokeDashoffset = pathObj.length + this.dashGap;
+    pathObj.length += this.dashGap;
+    totalLength += pathObj.length;
+
+    this.renderPath(i);
+  }
+
+  totalLength = totalLength === 0 ? 1 : totalLength;
+  this.delay = this.delay === null ? this.duration / 3 : this.delay;
+  this.delayUnit = this.delay / (paths.length > 1 ? paths.length - 1 : 1);
+
+  for (i = 0; i < this.map.length; i++) {
+    pathObj = this.map[i];
+
+    switch (this.type) {
+    case 'delayed':
+      pathObj.startAt = this.delayUnit * i;
+      pathObj.duration = this.duration - this.delay;
+      break;
+
+    case 'oneByOne':
+      pathObj.startAt = lengthMeter / totalLength * this.duration;
+      pathObj.duration = pathObj.length / totalLength * this.duration;
+      break;
+
+    case 'async':
+      pathObj.startAt = 0;
+      pathObj.duration = this.duration;
+      break;
+
+    case 'scenario-sync':
+      path = pathObj.el;
+      pAttrs = this.parseAttr(path);
+      pathObj.startAt = timePoint + (parsePositiveInt(pAttrs['data-delay'], this.delayUnit) || 0);
+      pathObj.duration = parsePositiveInt(pAttrs['data-duration'], this.duration);
+      timePoint = pAttrs['data-async'] !== undefined ? pathObj.startAt : pathObj.startAt + pathObj.duration;
+      this.frameLength = Math.max(this.frameLength, (pathObj.startAt + pathObj.duration));
+      break;
+
+    case 'scenario':
+      path = pathObj.el;
+      pAttrs = this.parseAttr(path);
+      pathObj.startAt = parsePositiveInt(pAttrs['data-start'], this.delayUnit) || 0;
+      pathObj.duration = parsePositiveInt(pAttrs['data-duration'], this.duration);
+      this.frameLength = Math.max(this.frameLength, (pathObj.startAt + pathObj.duration));
+      break;
+    }
+    lengthMeter += pathObj.length;
+    this.frameLength = this.frameLength || this.duration;
+  }
+};
+
+/**
+ * Interval method to draw the SVG from current
+ * position of the animation. It update the value of
+ * `currentFrame` and re-trace the SVG.
+ *
+ * It use this.handle to store the requestAnimationFrame
+ * and clear it one the animation is stopped. So this
+ * attribute can be used to know if the animation is
+ * playing.
+ *
+ * Once the animation at the end, this method will
+ * trigger the Vivus callback.
+ *
+ */
+Vivus.prototype.drawer = function () {
+  var self = this;
+  this.currentFrame += this.speed;
+
+  if (this.currentFrame <= 0) {
+    this.stop();
+    this.reset();
+    this.callback(this);
+  } else if (this.currentFrame >= this.frameLength) {
+    this.stop();
+    this.currentFrame = this.frameLength;
+    this.trace();
+    if (this.selfDestroy) {
+      this.destroy();
+    }
+    this.callback(this);
+  } else {
+    this.trace();
+    this.handle = requestAnimFrame(function () {
+      self.drawer();
+    });
+  }
+};
+
+/**
+ * Draw the SVG at the current instant from the
+ * `currentFrame` value. Here is where most of the magic is.
+ * The trick is to use the `strokeDashoffset` style property.
+ *
+ * For optimisation reasons, a new property called `progress`
+ * is added in each item of `map`. This one contain the current
+ * progress of the path element. Only if the new value is different
+ * the new value will be applied to the DOM element. This
+ * method save a lot of resources to re-render the SVG. And could
+ * be improved if the animation couldn't be played forward.
+ *
+ */
+Vivus.prototype.trace = function () {
+  var i, progress, path, currentFrame;
+  currentFrame = this.animTimingFunction(this.currentFrame / this.frameLength) * this.frameLength;
+  for (i = 0; i < this.map.length; i++) {
+    path = this.map[i];
+    progress = (currentFrame - path.startAt) / path.duration;
+    progress = this.pathTimingFunction(Math.max(0, Math.min(1, progress)));
+    if (path.progress !== progress) {
+      path.progress = progress;
+      path.el.style.strokeDashoffset = Math.floor(path.length * (1 - progress));
+      this.renderPath(i);
+    }
+  }
+};
+
+/**
+ * Method forcing the browser to re-render a path element
+ * from it's index in the map. Depending on the `forceRender`
+ * value.
+ * The trick is to replace the path element by it's clone.
+ * This practice is not recommended because it's asking more
+ * ressources, too much DOM manupulation..
+ * but it's the only way to let the magic happen on IE.
+ * By default, this fallback is only applied on IE.
+ *
+ * @param  {Number} index Path index
+ */
+Vivus.prototype.renderPath = function (index) {
+  if (this.forceRender && this.map && this.map[index]) {
+    var pathObj = this.map[index],
+        newPath = pathObj.el.cloneNode(true);
+    pathObj.el.parentNode.replaceChild(newPath, pathObj.el);
+    pathObj.el = newPath;
+  }
+};
+
+/**
+ * When the SVG object is loaded and ready,
+ * this method will continue the initialisation.
+ *
+ * This this mainly due to the case of passing an
+ * object tag in the constructor. It will wait
+ * the end of the loading to initialise.
+ *
+ */
+Vivus.prototype.init = function () {
+  // Set object variables
+  this.frameLength = 0;
+  this.currentFrame = 0;
+  this.map = [];
+
+  // Start
+  new Pathformer(this.el);
+  this.mapping();
+  this.starter();
+
+  if (this.onReady) {
+    this.onReady(this);
+  }
+};
+
+/**
+ * Trigger to start of the animation.
+ * Depending on the `start` value, a different script
+ * will be applied.
+ *
+ * If the `start` value is not valid, an error will be thrown.
+ * Even if technically, this is impossible.
+ *
+ */
+Vivus.prototype.starter = function () {
+  switch (this.start) {
+  case 'manual':
+    return;
+
+  case 'autostart':
+    this.play();
+    break;
+
+  case 'inViewport':
+    var self = this,
+    listener = function () {
+      if (self.isInViewport(self.parentEl, 1)) {
+        self.play();
+        window.removeEventListener('scroll', listener);
+      }
+    };
+    window.addEventListener('scroll', listener);
+    listener();
+    break;
+  }
+};
+
+
+/**
+ * Controls
+ **************************************
+ */
+
+/**
+ * Get the current status of the animation between
+ * three different states: 'start', 'progress', 'end'.
+ * @return {string} Instance status
+ */
+Vivus.prototype.getStatus = function () {
+  return this.currentFrame === 0 ? 'start' : this.currentFrame === this.frameLength ? 'end' : 'progress';
+};
+
+/**
+ * Reset the instance to the initial state : undraw
+ * Be careful, it just reset the animation, if you're
+ * playing the animation, this won't stop it. But just
+ * make it start from start.
+ *
+ */
+Vivus.prototype.reset = function () {
+  return this.setFrameProgress(0);
+};
+
+/**
+ * Set the instance to the final state : drawn
+ * Be careful, it just set the animation, if you're
+ * playing the animation on rewind, this won't stop it.
+ * But just make it start from the end.
+ *
+ */
+Vivus.prototype.finish = function () {
+  return this.setFrameProgress(1);
+};
+
+/**
+ * Set the level of progress of the drawing.
+ *
+ * @param {number} progress Level of progress to set
+ */
+Vivus.prototype.setFrameProgress = function (progress) {
+  progress = Math.min(1, Math.max(0, progress));
+  this.currentFrame = Math.round(this.frameLength * progress);
+  this.trace();
+  return this;
+};
+
+/**
+ * Play the animation at the desired speed.
+ * Speed must be a valid number (no zero).
+ * By default, the speed value is 1.
+ * But a negative value is accepted to go forward.
+ *
+ * And works with float too.
+ * But don't forget we are in JavaScript, se be nice
+ * with him and give him a 1/2^x value.
+ *
+ * @param  {number} speed Animation speed [optional]
+ */
+Vivus.prototype.play = function (speed) {
+  if (speed && typeof speed !== 'number') {
+    throw new Error('Vivus [play]: invalid speed');
+  }
+  this.speed = speed || 1;
+  if (!this.handle) {
+    this.drawer();
+  }
+  return this;
+};
+
+/**
+ * Stop the current animation, if on progress.
+ * Should not trigger any error.
+ *
+ */
+Vivus.prototype.stop = function () {
+  if (this.handle) {
+    cancelAnimFrame(this.handle);
+    this.handle = null;
+  }
+  return this;
+};
+
+/**
+ * Destroy the instance.
+ * Remove all bad styling attributes on all
+ * path tags
+ *
+ */
+Vivus.prototype.destroy = function () {
+  this.stop();
+  var i, path;
+  for (i = 0; i < this.map.length; i++) {
+    path = this.map[i];
+    path.el.style.strokeDashoffset = null;
+    path.el.style.strokeDasharray = null;
+    this.renderPath(i);
+  }
+};
+
+
+/**
+ * Utils methods
+ * include methods from Codrops
+ **************************************
+ */
+
+/**
+ * Method to best guess if a path should added into
+ * the animation or not.
+ *
+ * 1. Use the `data-vivus-ignore` attribute if set
+ * 2. Check if the instance must ignore invisible paths
+ * 3. Check if the path is visible
+ *
+ * For now the visibility checking is unstable.
+ * It will be used for a beta phase.
+ *
+ * Other improvments are planned. Like detecting
+ * is the path got a stroke or a valid opacity.
+ */
+Vivus.prototype.isInvisible = function (el) {
+  var rect,
+    ignoreAttr = el.getAttribute('data-ignore');
+
+  if (ignoreAttr !== null) {
+    return ignoreAttr !== 'false';
+  }
+
+  if (this.ignoreInvisible) {
+    rect = el.getBoundingClientRect();
+    return !rect.width && !rect.height;
+  }
+  else {
+    return false;
+  }
+};
+
+/**
+ * Parse attributes of a DOM element to
+ * get an object of {attributeName => attributeValue}
+ *
+ * @param  {object} element DOM element to parse
+ * @return {object}         Object of attributes
+ */
+Vivus.prototype.parseAttr = function (element) {
+  var attr, output = {};
+  if (element && element.attributes) {
+    for (var i = 0; i < element.attributes.length; i++) {
+      attr = element.attributes[i];
+      output[attr.name] = attr.value;
+    }
+  }
+  return output;
+};
+
+/**
+ * Reply if an element is in the page viewport
+ *
+ * @param  {object} el Element to observe
+ * @param  {number} h  Percentage of height
+ * @return {boolean}
+ */
+Vivus.prototype.isInViewport = function (el, h) {
+  var scrolled   = this.scrollY(),
+    viewed       = scrolled + this.getViewportH(),
+    elBCR        = el.getBoundingClientRect(),
+    elHeight     = elBCR.height,
+    elTop        = scrolled + elBCR.top,
+    elBottom     = elTop + elHeight;
+
+  // if 0, the element is considered in the viewport as soon as it enters.
+  // if 1, the element is considered in the viewport only when it's fully inside
+  // value in percentage (1 >= h >= 0)
+  h = h || 0;
+
+  return (elTop + elHeight * h) <= viewed && (elBottom) >= scrolled;
+};
+
+/**
+ * Alias for document element
+ *
+ * @type {DOMelement}
+ */
+Vivus.prototype.docElem = window.document.documentElement;
+
+/**
+ * Get the viewport height in pixels
+ *
+ * @return {integer} Viewport height
+ */
+Vivus.prototype.getViewportH = function () {
+  var client = this.docElem.clientHeight,
+    inner = window.innerHeight;
+
+  if (client < inner) {
+    return inner;
+  }
+  else {
+    return client;
+  }
+};
+
+/**
+ * Get the page Y offset
+ *
+ * @return {integer} Page Y offset
+ */
+Vivus.prototype.scrollY = function () {
+  return window.pageYOffset || this.docElem.scrollTop;
+};
+
+/**
+ * Alias for `requestAnimationFrame` or
+ * `setTimeout` function for deprecated browsers.
+ *
+ */
+requestAnimFrame = (function () {
+  return (
+    window.requestAnimationFrame       ||
+    window.webkitRequestAnimationFrame ||
+    window.mozRequestAnimationFrame    ||
+    window.oRequestAnimationFrame      ||
+    window.msRequestAnimationFrame     ||
+    function(/* function */ callback){
+      return window.setTimeout(callback, 1000 / 60);
+    }
+  );
+})();
+
+/**
+ * Alias for `cancelAnimationFrame` or
+ * `cancelTimeout` function for deprecated browsers.
+ *
+ */
+cancelAnimFrame = (function () {
+  return (
+    window.cancelAnimationFrame       ||
+    window.webkitCancelAnimationFrame ||
+    window.mozCancelAnimationFrame    ||
+    window.oCancelAnimationFrame      ||
+    window.msCancelAnimationFrame     ||
+    function(id){
+      return window.clearTimeout(id);
+    }
+  );
+})();
+
+/**
+ * Parse string to integer.
+ * If the number is not positive or null
+ * the method will return the default value
+ * or 0 if undefined
+ *
+ * @param {string} value String to parse
+ * @param {*} defaultValue Value to return if the result parsed is invalid
+ * @return {number}
+ *
+ */
+parsePositiveInt = function (value, defaultValue) {
+  var output = parseInt(value, 10);
+  return (output >= 0) ? output : defaultValue;
+};
+
+
+  if (typeof define === 'function' && define.amd) {
+    // AMD. Register as an anonymous module.
+    define([], function() {
+      return Vivus;
+    });
+  } else if (typeof exports === 'object') {
+    // Node. Does not work with strict CommonJS, but
+    // only CommonJS-like environments that support module.exports,
+    // like Node.
+    module.exports = Vivus;
+  } else {
+    // Browser globals
+    window.Vivus = Vivus;
+  }
+
+}(window, document));
+//! Likely 2.1.0 by Ilya Birman (ilyabirman.net)
+//! Rewritten sans jQuery by Evgeny Steblinsky (volter9.github.io)
+//! Supported by Ivan Akulov (iamakulov.com), Viktor Karpov (vitkarpov.com), and contributors
+//! Inspired by Social Likes by Artem Sapegin (sapegin.me)
+!function t(e,i,n){function r(c,s){if(!i[c]){if(!e[c]){var u="function"==typeof require&&require;if(!s&&u)return u(c,!0);if(o)return o(c,!0);throw new Error("Cannot find module '"+c+"'")}var a=i[c]={exports:{}};e[c][0].call(a.exports,function(t){var i=e[c][1][t];return r(i?i:t)},a,a.exports,t,e,i,n)}return i[c].exports}for(var o="function"==typeof require&&require,c=0;c<n.length;c++)r(n[c]);return r}({1:[function(t,e,i){"use strict";function n(t,e,i){this.widget=t,this.likely=e,this.options=s.merge(i),this.init()}var r=t("./services"),o=t("./config"),c=t("./fetch"),s=t("./utils"),u=t("./dom"),a='<span class="{className}">{content}</span>';n.prototype={init:function(){this.detectService(),this.detectParams(),this.service&&(this.initHtml(),setTimeout(this.initCounter.bind(this),0))},update:function(t){var e="."+o.prefix+"counter",i=u.findAll(e,this.widget);s.extend(this.options,s.merge({forceUpdate:!1},t)),s.toArray(i).forEach(function(t){t.parentNode.removeChild(t)}),this.initCounter()},detectService:function(){var t=this.widget,e=s.getDataset(t).service;e||(e=Object.keys(r).filter(function(e){return t.classList.contains(e)})[0]),e&&(this.service=e,s.extend(this.options,r[e]))},detectParams:function(){var t=this.options,e=s.getDataset(this.widget);if(e.counter){var i=parseInt(e.counter,10);isNaN(i)?t.counterUrl=e.counter:t.counterNumber=i}t.title=e.title||t.title,t.url=e.url||t.url},initHtml:function(){var t=this.options,e=this.widget,i=e.innerHTML;e.addEventListener("click",this.click.bind(this)),e.classList.remove(this.service),e.className+=" "+this.className("widget");var n=s.template(a,{className:this.className("button"),content:i}),r=s.template(a,{className:this.className("icon"),content:u.wrapSVG(t.svgi)});e.innerHTML=r+n},initCounter:function(){var t=this.options;t.counters&&t.counterNumber?this.updateCounter(t.counterNumber):t.counterUrl&&c(this.service,t.url,t)(this.updateCounter.bind(this))},className:function(t){var e=o.prefix+t;return e+" "+e+"_"+this.service},updateCounter:function(t){var e=parseInt(t,10)||0,i=u.find("."+o.name+"__counter",this.widget);i&&i.parentNode.removeChild(i);var n={className:this.className("counter"),content:e};e||this.options.zeroes||(n.className+=" "+o.prefix+"counter_empty",n.content=""),this.widget.appendChild(u.createNode(s.template(a,n))),this.likely.updateCounter(this.service,e)},click:function(){var t=this.options;if(t.click.call(this)){var e=s.makeUrl(t.popupUrl,{url:t.url,title:t.title});u.openPopup(this.addAdditionalParamsToUrl(e),o.prefix+this.service,t.popupWidth,t.popupHeight)}return!1},addAdditionalParamsToUrl:function(t){var e=s.query(s.merge(this.widget.dataset,this.options.data)),i=-1===t.indexOf("?")?"?":"&";return""===e?t:t+i+e}},e.exports=n},{"./config":2,"./dom":3,"./fetch":6,"./services":11,"./utils":18}],2:[function(t,e,i){"use strict";var n="https:"===window.location.protocol;e.exports={name:"likely",prefix:"likely__",secure:n,protocol:n?"https:":"http:"}},{}],3:[function(t,e,i){"use strict";var n=document.createElement("div"),r=0,o=e.exports={wrapSVG:function(t){return'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="M'+t+'z"/></svg>'},createNode:function(t){return n.innerHTML=t,n.children[0]},getScript:function(t){var e=document.createElement("script"),i=document.head;e.type="text/javascript",e.src=t,i.appendChild(e),i.removeChild(e)},getJSON:function(t,e){var i=encodeURIComponent("random_fun_"+ ++r),n=t.replace(/callback=(\?)/,"callback="+i);window[i]=e,o.getScript(n)},find:function(t,e){return(e||document).querySelector(t)},findAll:function(t,e){return(e||document).querySelectorAll(t)},openPopup:function(t,e,i,n){var r=Math.round(screen.width/2-i/2),o=0;screen.height>n&&(o=Math.round(screen.height/3-n/2));var c="left="+r+",top="+o+",width="+i+",height="+n+",personalbar=0,toolbar=0,scrollbars=1,resizable=1",s=window.open(t,e,c);return s?(s.focus(),s):(location.href=t,null)}}},{}],4:[function(t,e,i){"use strict";e.exports=function(t){var e=[];return function(i){var n=typeof i;return"undefined"===n?t:void("function"===n?e.push(i):(t=i,e.forEach(function(t){t(i)})))}}},{}],5:[function(t,e,i){"use strict";var n=t("./index.js");window.likely=n,window.addEventListener("load",n.initiate)},{"./index.js":7}],6:[function(t,e,i){"use strict";var n=t("./services"),r=t("./factory"),o=t("./utils"),c={};e.exports=function(t,e,i){c[t]||(c[t]={});var s=c[t],u=s[e];if(!i.forceUpdate&&u)return u;u=r();var a=o.makeUrl(i.counterUrl,{url:e});return n[t].counter(a,u,e),s[e]=u,u}},{"./factory":4,"./services":11,"./utils":18}],7:[function(t,e,i){"use strict";var n=t("./widget"),r=t("./config"),o=t("./utils"),c=t("./dom"),s=function(t,e){var i=e||{},c=t[r.name];return c?c.update(i):t[r.name]=new n(t,o.merge({},s.defaults,i,o.bools(t))),c};s.initiate=s.initate=function(){var t=c.findAll("."+r.name);o.toArray(t).forEach(function(t){s(t)})},s.defaults={counters:!0,timeout:1e3,zeroes:!1,title:document.title,wait:500,url:o.getDefaultUrl()},e.exports=s},{"./config":2,"./dom":3,"./utils":18,"./widget":19}],8:[function(t,e,i){"use strict";var n=t("./dom"),r=function(t,e){var i=this;n.getJSON(t,function(t){try{var n="function"==typeof i.convertNumber?i.convertNumber(t):t;e(n)}catch(r){}})};e.exports=function(t){t.counter=t.counter||r,t.click=t.click||function(){return!0}}},{"./dom":3}],9:[function(t,e,i){"use strict";e.exports={counterUrl:"https://graph.facebook.com/fql?q=SELECT+total_count+FROM+link_stat+WHERE+url%3D%22{url}%22&callback=?",convertNumber:function(t){return t.data[0].total_count},popupUrl:"https://www.facebook.com/sharer/sharer.php?u={url}",popupWidth:600,popupHeight:500}},{}],10:[function(t,e,i){"use strict";var n={counterUrl:"https://share.yandex.net/counter/gpp/?url={url}&callback=?",gid:0,promises:{},popupUrl:"https://plus.google.com/share?url={url}",popupWidth:700,popupHeight:500};e.exports=n},{}],11:[function(t,e,i){"use strict";var n=t("../service"),r=t("../utils"),o=t("../svg.js"),c={odnoklassniki:t("./odnoklassniki"),vkontakte:t("./vk"),pinterest:t("./pinterest"),facebook:t("./facebook"),twitter:t("./twitter"),gplus:t("./gplus"),telegram:t("./telegram")};r.each(c,function(t,e){n(t),t.svgi=o[e],t.name=e}),e.exports=c},{"../service":8,"../svg.js":17,"../utils":18,"./facebook":9,"./gplus":10,"./odnoklassniki":12,"./pinterest":13,"./telegram":14,"./twitter":15,"./vk":16}],12:[function(t,e,i){"use strict";var n=t("../config"),r=t("../utils"),o=t("../dom"),c={counterUrl:n.protocol+"//connect.ok.ru/dk?st.cmd=extLike&ref={url}&uid={index}",counter:function(t,e){this.promises.push(e),o.getScript(r.makeUrl(t,{index:this.promises.length-1}))},promises:[],popupUrl:n.protocol+"//connect.ok.ru/dk?st.cmd=WidgetSharePreview&service=odnoklassniki&st.shareUrl={url}",popupWidth:640,popupHeight:400};r.set(window,"ODKL.updateCount",function(t,e){c.promises[t](e)}),e.exports=c},{"../config":2,"../dom":3,"../utils":18}],13:[function(t,e,i){"use strict";var n=t("../config");e.exports={counterUrl:n.protocol+"//api.pinterest.com/v1/urls/count.json?url={url}&callback=?",convertNumber:function(t){return t.count},popupUrl:n.protocol+"//pinterest.com/pin/create/button/?url={url}&description={title}",popupWidth:630,popupHeight:270}},{"../config":2}],14:[function(t,e,i){"use strict";e.exports={popupUrl:"https://telegram.me/share/url?url={url}",popupWidth:600,popupHeight:500}},{}],15:[function(t,e,i){"use strict";e.exports={popupUrl:"https://twitter.com/intent/tweet?url={url}&text={title}",popupWidth:600,popupHeight:450,click:function(){return/[\.\?:\-–—]\s*$/.test(this.options.title)||(this.options.title+=":"),!0}}},{}],16:[function(t,e,i){"use strict";var n=t("../config"),r=t("../utils"),o=t("../dom"),c={counterUrl:"https://vk.com/share.php?act=count&url={url}&index={index}",counter:function(t,e){this.promises.push(e),o.getScript(r.makeUrl(t,{index:this.promises.length-1}))},promises:[],popupUrl:n.protocol+"//vk.com/share.php?url={url}&title={title}",popupWidth:550,popupHeight:330};r.set(window,"VK.Share.count",function(t,e){c.promises[t](e)}),e.exports=c},{"../config":2,"../dom":3,"../utils":18}],17:[function(t,e,i){"use strict";e.exports={facebook:"13 0H3C1 0 0 1 0 3v10c0 2 1 3 3 3h5V9H6V7h2V5c0-2 2-2 2-2h3v2h-3v2h3l-.5 2H10v7h3c2 0 3-1 3-3V3c0-2-1-3-3-3",twitter:"15.96 3.42c-.04.153-.144.31-.237.414l-.118.058v.118l-.59.532-.237.295c-.05.036-.398.21-.413.237V6.49h-.06v.473h-.058v.294h-.058v.296h-.06v.235h-.06v.237h-.058c-.1.355-.197.71-.295 1.064h-.06v.116h-.06c-.02.1-.04.197-.058.296h-.06c-.04.118-.08.237-.118.355h-.06c-.038.118-.078.236-.117.353l-.118.06-.06.235-.117.06v.116l-.118.06v.12h-.06c-.02.057-.038.117-.058.175l-.118.06v.117c-.06.04-.118.08-.177.118v.118l-.237.177v.118l-.59.53-.532.592h-.117c-.06.078-.118.156-.177.236l-.177.06-.06.117h-.118l-.06.118-.176.06v.058h-.118l-.06.118-.353.12-.06.117c-.078.02-.156.04-.235.058v.06c-.118.038-.236.078-.354.118v.058H8.76v.06h-.12v.06h-.176v.058h-.118v.06H8.17v.058H7.99v.06l-.413.058v.06h-.237c-.667.22-1.455.293-2.36.293h-.886v-.058h-.53v-.06H3.27v-.06h-.295v-.06H2.68v-.057h-.177v-.06h-.236v-.058H2.09v-.06h-.177v-.058h-.177v-.06H1.56v-.058h-.12v-.06l-.294-.06v-.057c-.118-.04-.236-.08-.355-.118v-.06H.674v-.058H.555v-.06H.437v-.058H.32l-.06-.12H.142v-.058c-.13-.08-.083.026-.177-.118H1.56v-.06c.294-.04.59-.077.884-.117v-.06h.177v-.058h.237v-.06h.118v-.06h.177v-.057h.118v-.06h.177v-.058l.236-.06v-.058l.236-.06c.02-.038.04-.078.058-.117l.237-.06c.02-.04.04-.077.058-.117h.118l.06-.118h.118c.036-.025.047-.078.118-.118V12.1c-1.02-.08-1.84-.54-2.303-1.183-.08-.058-.157-.118-.236-.176v-.117l-.118-.06v-.117c-.115-.202-.268-.355-.296-.65.453.004.987.008 1.354-.06v-.06c-.254-.008-.47-.08-.65-.175v-.058H2.32v-.06c-.08-.02-.157-.04-.236-.058l-.06-.118h-.117l-.118-.178h-.12c-.077-.098-.156-.196-.235-.294l-.118-.06v-.117l-.177-.12c-.35-.502-.6-1.15-.59-2.006h.06c.204.234.948.377 1.357.415v-.06c-.257-.118-.676-.54-.827-.768V5.9l-.118-.06c-.04-.117-.08-.236-.118-.354h-.06v-.118H.787c-.04-.196-.08-.394-.118-.59-.06-.19-.206-.697-.118-1.005h.06V3.36h.058v-.177h.06v-.177h.057V2.83h.06c.04-.118.078-.236.117-.355h.118v.06c.12.097.237.196.355.295v.118l.118.058c.08.098.157.197.236.295l.176.06.354.413h.118l.177.236h.118l.06.117h.117c.04.06.08.118.118.177h.118l.06.118.235.06.06.117.356.12.06.117.53.176v.06h.118v.058l.236.06v.06c.118.02.236.04.355.058v.06h.177v.058h.177v.06h.176v.058h.236v.06l.472.057v.06l1.417.18v-.237c-.1-.112-.058-.442-.057-.65 0-.573.15-.99.354-1.358v-.117l.118-.06.06-.235.176-.118v-.118c.14-.118.276-.236.414-.355l.06-.117h.117l.12-.177.235-.06.06-.117h.117v-.058H9.7v-.058h.177v-.06h.177v-.058h.177v-.06h.296v-.058h1.063v.058h.294v.06h.177v.058h.178v.06h.177v.058h.118v.06h.118l.06.117c.08.018.158.038.236.058.04.06.08.118.118.177h.118l.06.117c.142.133.193.163.472.178.136-.12.283-.05.472-.118v-.06h.177v-.058h.177v-.06l.236-.058v-.06h.177l.59-.352v.176h-.058l-.06.295h-.058v.117h-.06v.118l-.117.06v.118l-.177.118v.117l-.118.06-.354.412h-.117l-.177.236h.06c.13-.112.402-.053.59-.117l1.063-.353",vkontakte:"13 0H3C1 0 0 1 0 3v10c0 2 1 3 3 3h10c2 0 3-1 3-3V3c0-2-1-3-3-3zm.452 11.394l-1.603.022s-.345.068-.8-.243c-.598-.41-1.164-1.48-1.604-1.342-.446.144-.432 1.106-.432 1.106s.003.206-.1.315c-.11.12-.326.144-.326.144H7.87s-1.582.095-2.975-1.356c-1.52-1.583-2.862-4.723-2.862-4.723s-.078-.206.006-.305c.094-.112.35-.12.35-.12l1.716-.01s.162.026.277.11c.095.07.15.202.15.202s.276.7.643 1.335c.716 1.238 1.05 1.508 1.293 1.376.353-.193.247-1.75.247-1.75s.006-.565-.178-.817c-.145-.194-.415-.25-.534-.267-.096-.014.062-.238.267-.338.31-.15.853-.16 1.497-.153.502.004.646.035.842.083.59.143.39.694.39 2.016 0 .422-.075 1.018.23 1.215.13.085.453.013 1.256-1.352.38-.647.666-1.407.666-1.407s.062-.136.16-.194c.098-.06.232-.04.232-.04l1.804-.012s.542-.065.63.18c.092.257-.203.857-.94 1.84-1.21 1.612-1.345 1.46-.34 2.394.96.89 1.16 1.325 1.192 1.38.4.66-.44.71-.44.71",gplus:"8,6.5v3h4.291c-0.526,2.01-2.093,3.476-4.315,3.476C5.228,12.976,3,10.748,3,8c0-2.748,2.228-4.976,4.976-4.976c1.442,0,2.606,0.623,3.397,1.603L13.52,2.48C12.192,0.955,10.276,0,8,0C3.582,0,0,3.582,0,8s3.582,8,8,8s7.5-3.582,7.5-8V6.5H8",pinterest:"7.99 0c-4.417 0-8 3.582-8 8 0 3.39 2.11 6.284 5.086 7.45-.07-.633-.133-1.604.028-2.295.145-.624.938-3.977.938-3.977s-.24-.48-.24-1.188c0-1.112.645-1.943 1.448-1.943.683 0 1.012.512 1.012 1.127 0 .686-.437 1.713-.663 2.664-.19.796.398 1.446 1.184 1.446 1.422 0 2.515-1.5 2.515-3.664 0-1.915-1.377-3.255-3.343-3.255-2.276 0-3.612 1.707-3.612 3.472 0 .688.265 1.425.595 1.826.065.08.075.15.055.23-.06.252-.195.796-.222.907-.035.146-.116.177-.268.107-1-.465-1.624-1.926-1.624-3.1 0-2.523 1.835-4.84 5.287-4.84 2.775 0 4.932 1.977 4.932 4.62 0 2.757-1.74 4.976-4.152 4.976-.81 0-1.573-.42-1.834-.92l-.498 1.903c-.18.695-.668 1.566-.994 2.097.75.232 1.544.357 2.37.357 4.417 0 8-3.582 8-8s-3.583-8-8-8",odnoklassniki:"8 6.107c.888 0 1.607-.72 1.607-1.607 0-.888-.72-1.607-1.607-1.607s-1.607.72-1.607 1.607c0 .888.72 1.607 1.607 1.607zM13 0H3C1 0 0 1 0 3v10c0 2 1 3 3 3h10c2 0 3-1 3-3V3c0-2-1-3-3-3zM8 .75c2.07 0 3.75 1.68 3.75 3.75 0 2.07-1.68 3.75-3.75 3.75S4.25 6.57 4.25 4.5C4.25 2.43 5.93.75 8 .75zm3.826 12.634c.42.42.42 1.097 0 1.515-.21.208-.483.313-.758.313-.274 0-.548-.105-.758-.314L8 12.59 5.69 14.9c-.42.418-1.098.418-1.516 0s-.42-1.098 0-1.516L6.357 11.2c-1.303-.386-2.288-1.073-2.337-1.11-.473-.354-.57-1.025-.214-1.5.354-.47 1.022-.567 1.496-.216.03.022 1.4.946 2.698.946 1.31 0 2.682-.934 2.693-.943.474-.355 1.146-.258 1.5.213.355.474.26 1.146-.214 1.5-.05.036-1.035.723-2.338 1.11l2.184 2.184",telegram:"6,11.960784l-1,-3l11,-8l-15.378,5.914c0,0 -0.672,0.23 -0.619,0.655c0.053,0.425 0.602,0.619 0.602,0.619l3.575,1.203l1.62,5.154l2.742,-2.411l-0.007,-0.005l3.607,2.766c0.973,0.425 1.327,-0.46 1.327,-0.46l2.531,-13.435l-10,11z"}},{}],18:[function(t,e,i){"use strict";var n={yes:!0,no:!1},r={each:function(t,e){for(var i in t)t.hasOwnProperty(i)&&e(t[i],i)},toArray:function(t){return Array.prototype.slice.call(t)},merge:function(){for(var t={},e=0;e<arguments.length;e++){var i=arguments[e];if(i)for(var n in i)i.hasOwnProperty(n)&&(t[n]=i[n])}return t},extend:function(t,e){for(var i in e)e.hasOwnProperty(i)&&(t[i]=e[i])},getDataset:function(t){if("object"==typeof t.dataset)return t.dataset;var e,i,n,r={},o=t.attributes,c=function(t){return t.charAt(1).toUpperCase()};for(e=o.length-1;e>=0;e--)i=o[e],i&&i.name&&/^data-\w[\w\-]*$/.test(i.name)&&(n=i.name.substr(5).replace(/-./g,c),r[n]=i.value);return r},bools:function(t){var e={},i=r.getDataset(t);for(var o in i)if(i.hasOwnProperty(o)){var c=i[o];e[o]=n[c]||c}return e},template:function(t,e){return t?t.replace(/\{([^\}]+)\}/g,function(t,i){return i in e?e[i]:t}):""},makeUrl:function(t,e){for(var i in e)e.hasOwnProperty(i)&&(e[i]=encodeURIComponent(e[i]));return r.template(t,e)},query:function(t){var e=encodeURIComponent,i=[];for(var n in t)"object"!=typeof t[n]&&i.push(e(n)+"="+e(t[n]));return i.join("&")},set:function(t,e,i){var n=e.split("."),r=null;n.forEach(function(e,i){"undefined"==typeof t[e]&&(t[e]={}),i!==n.length-1&&(t=t[e]),r=e}),t[r]=i},getDefaultUrl:function(){var t=document.querySelector('link[rel="canonical"]');return t?t.href:window.location.href.replace(window.location.hash,"")}};e.exports=r},{}],19:[function(t,e,i){"use strict";function n(t,e){this.container=t,this.options=e,this.countersLeft=0,this.buttons=[],this.number=0,this.init()}var r=t("./button"),o=t("./config"),c=t("./utils");n.prototype={init:function(){c.toArray(this.container.children).forEach(this.addButton.bind(this)),this.options.counters?(this.timer=setTimeout(this.appear.bind(this),this.options.wait),this.timeout=setTimeout(this.ready.bind(this),this.options.timeout)):this.appear()},addButton:function(t){var e=new r(t,this,this.options);this.buttons.push(e),e.options.counterUrl&&this.countersLeft++},update:function(t){(t.forceUpdate||t.url!==this.options.url)&&(this.countersLeft=this.buttons.length,this.number=0,this.buttons.forEach(function(e){e.update(t)}))},updateCounter:function(t,e){e&&(this.number+=e),this.countersLeft--,0===this.countersLeft&&(this.appear(),this.ready())},appear:function(){this.container.classList.add(o.name+"_visible")},ready:function(){this.timeout&&(clearTimeout(this.timeout),this.container.classList.add(o.name+"_ready"))}},e.exports=n},{"./button":1,"./config":2,"./utils":18}]},{},[5]);
+/*!
+ * Lazy Load - jQuery plugin for lazy loading images
+ *
+ * Copyright (c) 2007-2015 Mika Tuupola
+ *
+ * Licensed under the MIT license:
+ *   http://www.opensource.org/licenses/mit-license.php
+ *
+ * Project home:
+ *   http://www.appelsiini.net/projects/lazyload
+ *
+ * Version:  1.9.7
+ *
+ */
+
+(function($, window, document, undefined) {
+    var $window = $(window);
+
+    $.fn.lazyload = function(options) {
+        var elements = this;
+        var $container;
+        var settings = {
+            threshold       : 0,
+            failure_limit   : 0,
+            event           : "scroll",
+            effect          : "show",
+            container       : window,
+            data_attribute  : "original",
+            skip_invisible  : false,
+            appear          : null,
+            load            : null,
+            placeholder     : "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsQAAA7EAZUrDhsAAAANSURBVBhXYzh8+PB/AAffA0nNPuCLAAAAAElFTkSuQmCC"
+        };
+
+        function update() {
+            var counter = 0;
+
+            elements.each(function() {
+                var $this = $(this);
+                if (settings.skip_invisible && !$this.is(":visible")) {
+                    return;
+                }
+                if ($.abovethetop(this, settings) ||
+                    $.leftofbegin(this, settings)) {
+                        /* Nothing. */
+                } else if (!$.belowthefold(this, settings) &&
+                    !$.rightoffold(this, settings)) {
+                        $this.trigger("appear");
+                        /* if we found an image we'll load, reset the counter */
+                        counter = 0;
+                } else {
+                    if (++counter > settings.failure_limit) {
+                        return false;
+                    }
+                }
+            });
+
+        }
+
+        if(options) {
+            /* Maintain BC for a couple of versions. */
+            if (undefined !== options.failurelimit) {
+                options.failure_limit = options.failurelimit;
+                delete options.failurelimit;
+            }
+            if (undefined !== options.effectspeed) {
+                options.effect_speed = options.effectspeed;
+                delete options.effectspeed;
+            }
+
+            $.extend(settings, options);
+        }
+
+        /* Cache container as jQuery as object. */
+        $container = (settings.container === undefined ||
+                      settings.container === window) ? $window : $(settings.container);
+
+        /* Fire one scroll event per scroll. Not one scroll event per image. */
+        if (0 === settings.event.indexOf("scroll")) {
+            $container.bind(settings.event, function() {
+                return update();
+            });
+        }
+
+        this.each(function() {
+            var self = this;
+            var $self = $(self);
+
+            self.loaded = false;
+
+            /* If no src attribute given use data:uri. */
+            if ($self.attr("src") === undefined || $self.attr("src") === false) {
+                if ($self.is("img")) {
+                    $self.attr("src", settings.placeholder);
+                }
+            }
+
+            /* When appear is triggered load original image. */
+            $self.one("appear", function() {
+                if (!this.loaded) {
+                    if (settings.appear) {
+                        var elements_left = elements.length;
+                        settings.appear.call(self, elements_left, settings);
+                    }
+                    $("<img />")
+                        .bind("load", function() {
+
+                            var original = $self.attr("data-" + settings.data_attribute);
+                            $self.hide();
+                            if ($self.is("img")) {
+                                $self.attr("src", original);
+                            } else {
+                                $self.css("background-image", "url('" + original + "')");
+                            }
+                            $self[settings.effect](settings.effect_speed);
+
+                            self.loaded = true;
+
+                            /* Remove image from array so it is not looped next time. */
+                            var temp = $.grep(elements, function(element) {
+                                return !element.loaded;
+                            });
+                            elements = $(temp);
+
+                            if (settings.load) {
+                                var elements_left = elements.length;
+                                settings.load.call(self, elements_left, settings);
+                            }
+                        })
+                        .attr("src", $self.attr("data-" + settings.data_attribute));
+                }
+            });
+
+            /* When wanted event is triggered load original image */
+            /* by triggering appear.                              */
+            if (0 !== settings.event.indexOf("scroll")) {
+                $self.bind(settings.event, function() {
+                    if (!self.loaded) {
+                        $self.trigger("appear");
+                    }
+                });
+            }
+        });
+
+        /* Check if something appears when window is resized. */
+        $window.bind("resize", function() {
+            update();
+        });
+
+        /* With IOS5 force loading images when navigating with back button. */
+        /* Non optimal workaround. */
+        if ((/(?:iphone|ipod|ipad).*os 5/gi).test(navigator.appVersion)) {
+            $window.bind("pageshow", function(event) {
+                if (event.originalEvent && event.originalEvent.persisted) {
+                    elements.each(function() {
+                        $(this).trigger("appear");
+                    });
+                }
+            });
+        }
+
+        /* Force initial check if images should appear. */
+        $(document).ready(function() {
+            update();
+        });
+
+        return this;
+    };
+
+    /* Convenience methods in jQuery namespace.           */
+    /* Use as  $.belowthefold(element, {threshold : 100, container : window}) */
+
+    $.belowthefold = function(element, settings) {
+        var fold;
+
+        if (settings.container === undefined || settings.container === window) {
+            fold = (window.innerHeight ? window.innerHeight : $window.height()) + $window.scrollTop();
+        } else {
+            fold = $(settings.container).offset().top + $(settings.container).height();
+        }
+
+        return fold <= $(element).offset().top - settings.threshold;
+    };
+
+    $.rightoffold = function(element, settings) {
+        var fold;
+
+        if (settings.container === undefined || settings.container === window) {
+            fold = $window.width() + $window.scrollLeft();
+        } else {
+            fold = $(settings.container).offset().left + $(settings.container).width();
+        }
+
+        return fold <= $(element).offset().left - settings.threshold;
+    };
+
+    $.abovethetop = function(element, settings) {
+        var fold;
+
+        if (settings.container === undefined || settings.container === window) {
+            fold = $window.scrollTop();
+        } else {
+            fold = $(settings.container).offset().top;
+        }
+
+        return fold >= $(element).offset().top + settings.threshold  + $(element).height();
+    };
+
+    $.leftofbegin = function(element, settings) {
+        var fold;
+
+        if (settings.container === undefined || settings.container === window) {
+            fold = $window.scrollLeft();
+        } else {
+            fold = $(settings.container).offset().left;
+        }
+
+        return fold >= $(element).offset().left + settings.threshold + $(element).width();
+    };
+
+    $.inviewport = function(element, settings) {
+         return !$.rightoffold(element, settings) && !$.leftofbegin(element, settings) &&
+                !$.belowthefold(element, settings) && !$.abovethetop(element, settings);
+     };
+
+    /* Custom selectors for your convenience.   */
+    /* Use as $("img:below-the-fold").something() or */
+    /* $("img").filter(":below-the-fold").something() which is faster */
+
+    $.extend($.expr[":"], {
+        "below-the-fold" : function(a) { return $.belowthefold(a, {threshold : 0}); },
+        "above-the-top"  : function(a) { return !$.belowthefold(a, {threshold : 0}); },
+        "right-of-screen": function(a) { return $.rightoffold(a, {threshold : 0}); },
+        "left-of-screen" : function(a) { return !$.rightoffold(a, {threshold : 0}); },
+        "in-viewport"    : function(a) { return $.inviewport(a, {threshold : 0}); },
+        /* Maintain BC for couple of versions. */
+        "above-the-fold" : function(a) { return !$.belowthefold(a, {threshold : 0}); },
+        "right-of-fold"  : function(a) { return $.rightoffold(a, {threshold : 0}); },
+        "left-of-fold"   : function(a) { return !$.rightoffold(a, {threshold : 0}); }
+    });
+
+})(jQuery, window, document);
 
 /*!
  * jQuery Color Animations v@VERSION
@@ -11147,3 +12409,833 @@ colors = jQuery.Color.names = {
 			});
 	}
 })(jQuery);
+// jquery.event.move
+//
+// 1.3.6
+//
+// Stephen Band
+//
+// Triggers 'movestart', 'move' and 'moveend' events after
+// mousemoves following a mousedown cross a distance threshold,
+// similar to the native 'dragstart', 'drag' and 'dragend' events.
+// Move events are throttled to animation frames. Move event objects
+// have the properties:
+//
+// pageX:
+// pageY:   Page coordinates of pointer.
+// startX:
+// startY:  Page coordinates of pointer at movestart.
+// distX:
+// distY:  Distance the pointer has moved since movestart.
+// deltaX:
+// deltaY:  Distance the finger has moved since last event.
+// velocityX:
+// velocityY:  Average velocity over last few events.
+
+
+(function (module) {
+	if (typeof define === 'function' && define.amd) {
+		// AMD. Register as an anonymous module.
+		define(['jquery'], module);
+	} else {
+		// Browser globals
+		module(jQuery);
+	}
+})(function(jQuery, undefined){
+
+	var // Number of pixels a pressed pointer travels before movestart
+	    // event is fired.
+	    threshold = 6,
+	
+	    add = jQuery.event.add,
+	
+	    remove = jQuery.event.remove,
+
+	    // Just sugar, so we can have arguments in the same order as
+	    // add and remove.
+	    trigger = function(node, type, data) {
+	    	jQuery.event.trigger(type, data, node);
+	    },
+
+	    // Shim for requestAnimationFrame, falling back to timer. See:
+	    // see http://paulirish.com/2011/requestanimationframe-for-smart-animating/
+	    requestFrame = (function(){
+	    	return (
+	    		window.requestAnimationFrame ||
+	    		window.webkitRequestAnimationFrame ||
+	    		window.mozRequestAnimationFrame ||
+	    		window.oRequestAnimationFrame ||
+	    		window.msRequestAnimationFrame ||
+	    		function(fn, element){
+	    			return window.setTimeout(function(){
+	    				fn();
+	    			}, 25);
+	    		}
+	    	);
+	    })(),
+	    
+	    ignoreTags = {
+	    	textarea: true,
+	    	input: true,
+	    	select: true,
+	    	button: true
+	    },
+	    
+	    mouseevents = {
+	    	move: 'mousemove',
+	    	cancel: 'mouseup dragstart',
+	    	end: 'mouseup'
+	    },
+	    
+	    touchevents = {
+	    	move: 'touchmove',
+	    	cancel: 'touchend',
+	    	end: 'touchend'
+	    };
+
+
+	// Constructors
+	
+	function Timer(fn){
+		var callback = fn,
+		    active = false,
+		    running = false;
+		
+		function trigger(time) {
+			if (active){
+				callback();
+				requestFrame(trigger);
+				running = true;
+				active = false;
+			}
+			else {
+				running = false;
+			}
+		}
+		
+		this.kick = function(fn) {
+			active = true;
+			if (!running) { trigger(); }
+		};
+		
+		this.end = function(fn) {
+			var cb = callback;
+			
+			if (!fn) { return; }
+			
+			// If the timer is not running, simply call the end callback.
+			if (!running) {
+				fn();
+			}
+			// If the timer is running, and has been kicked lately, then
+			// queue up the current callback and the end callback, otherwise
+			// just the end callback.
+			else {
+				callback = active ?
+					function(){ cb(); fn(); } : 
+					fn ;
+				
+				active = true;
+			}
+		};
+	}
+
+
+	// Functions
+	
+	function returnTrue() {
+		return true;
+	}
+	
+	function returnFalse() {
+		return false;
+	}
+	
+	function preventDefault(e) {
+		e.preventDefault();
+	}
+	
+	function preventIgnoreTags(e) {
+		// Don't prevent interaction with form elements.
+		if (ignoreTags[ e.target.tagName.toLowerCase() ]) { return; }
+		
+		e.preventDefault();
+	}
+
+	function isLeftButton(e) {
+		// Ignore mousedowns on any button other than the left (or primary)
+		// mouse button, or when a modifier key is pressed.
+		return (e.which === 1 && !e.ctrlKey && !e.altKey);
+	}
+
+	function identifiedTouch(touchList, id) {
+		var i, l;
+
+		if (touchList.identifiedTouch) {
+			return touchList.identifiedTouch(id);
+		}
+		
+		// touchList.identifiedTouch() does not exist in
+		// webkit yet… we must do the search ourselves...
+		
+		i = -1;
+		l = touchList.length;
+		
+		while (++i < l) {
+			if (touchList[i].identifier === id) {
+				return touchList[i];
+			}
+		}
+	}
+
+	function changedTouch(e, event) {
+		var touch = identifiedTouch(e.changedTouches, event.identifier);
+
+		// This isn't the touch you're looking for.
+		if (!touch) { return; }
+
+		// Chrome Android (at least) includes touches that have not
+		// changed in e.changedTouches. That's a bit annoying. Check
+		// that this touch has changed.
+		if (touch.pageX === event.pageX && touch.pageY === event.pageY) { return; }
+
+		return touch;
+	}
+
+
+	// Handlers that decide when the first movestart is triggered
+	
+	function mousedown(e){
+		var data;
+
+		if (!isLeftButton(e)) { return; }
+
+		data = {
+			target: e.target,
+			startX: e.pageX,
+			startY: e.pageY,
+			timeStamp: e.timeStamp
+		};
+
+		add(document, mouseevents.move, mousemove, data);
+		add(document, mouseevents.cancel, mouseend, data);
+	}
+
+	function mousemove(e){
+		var data = e.data;
+
+		checkThreshold(e, data, e, removeMouse);
+	}
+
+	function mouseend(e) {
+		removeMouse();
+	}
+
+	function removeMouse() {
+		remove(document, mouseevents.move, mousemove);
+		remove(document, mouseevents.cancel, mouseend);
+	}
+
+	function touchstart(e) {
+		var touch, template;
+
+		// Don't get in the way of interaction with form elements.
+		if (ignoreTags[ e.target.tagName.toLowerCase() ]) { return; }
+
+		touch = e.changedTouches[0];
+		
+		// iOS live updates the touch objects whereas Android gives us copies.
+		// That means we can't trust the touchstart object to stay the same,
+		// so we must copy the data. This object acts as a template for
+		// movestart, move and moveend event objects.
+		template = {
+			target: touch.target,
+			startX: touch.pageX,
+			startY: touch.pageY,
+			timeStamp: e.timeStamp,
+			identifier: touch.identifier
+		};
+
+		// Use the touch identifier as a namespace, so that we can later
+		// remove handlers pertaining only to this touch.
+		add(document, touchevents.move + '.' + touch.identifier, touchmove, template);
+		add(document, touchevents.cancel + '.' + touch.identifier, touchend, template);
+	}
+
+	function touchmove(e){
+		var data = e.data,
+		    touch = changedTouch(e, data);
+
+		if (!touch) { return; }
+
+		checkThreshold(e, data, touch, removeTouch);
+	}
+
+	function touchend(e) {
+		var template = e.data,
+		    touch = identifiedTouch(e.changedTouches, template.identifier);
+
+		if (!touch) { return; }
+
+		removeTouch(template.identifier);
+	}
+
+	function removeTouch(identifier) {
+		remove(document, '.' + identifier, touchmove);
+		remove(document, '.' + identifier, touchend);
+	}
+
+
+	// Logic for deciding when to trigger a movestart.
+
+	function checkThreshold(e, template, touch, fn) {
+		var distX = touch.pageX - template.startX,
+		    distY = touch.pageY - template.startY;
+
+		// Do nothing if the threshold has not been crossed.
+		if ((distX * distX) + (distY * distY) < (threshold * threshold)) { return; }
+
+		triggerStart(e, template, touch, distX, distY, fn);
+	}
+
+	function handled() {
+		// this._handled should return false once, and after return true.
+		this._handled = returnTrue;
+		return false;
+	}
+
+	function flagAsHandled(e) {
+		e._handled();
+	}
+
+	function triggerStart(e, template, touch, distX, distY, fn) {
+		var node = template.target,
+		    touches, time;
+
+		touches = e.targetTouches;
+		time = e.timeStamp - template.timeStamp;
+
+		// Create a movestart object with some special properties that
+		// are passed only to the movestart handlers.
+		template.type = 'movestart';
+		template.distX = distX;
+		template.distY = distY;
+		template.deltaX = distX;
+		template.deltaY = distY;
+		template.pageX = touch.pageX;
+		template.pageY = touch.pageY;
+		template.velocityX = distX / time;
+		template.velocityY = distY / time;
+		template.targetTouches = touches;
+		template.finger = touches ?
+			touches.length :
+			1 ;
+
+		// The _handled method is fired to tell the default movestart
+		// handler that one of the move events is bound.
+		template._handled = handled;
+			
+		// Pass the touchmove event so it can be prevented if or when
+		// movestart is handled.
+		template._preventTouchmoveDefault = function() {
+			e.preventDefault();
+		};
+
+		// Trigger the movestart event.
+		trigger(template.target, template);
+
+		// Unbind handlers that tracked the touch or mouse up till now.
+		fn(template.identifier);
+	}
+
+
+	// Handlers that control what happens following a movestart
+
+	function activeMousemove(e) {
+		var timer = e.data.timer;
+
+		e.data.touch = e;
+		e.data.timeStamp = e.timeStamp;
+		timer.kick();
+	}
+
+	function activeMouseend(e) {
+		var event = e.data.event,
+		    timer = e.data.timer;
+		
+		removeActiveMouse();
+
+		endEvent(event, timer, function() {
+			// Unbind the click suppressor, waiting until after mouseup
+			// has been handled.
+			setTimeout(function(){
+				remove(event.target, 'click', returnFalse);
+			}, 0);
+		});
+	}
+
+	function removeActiveMouse(event) {
+		remove(document, mouseevents.move, activeMousemove);
+		remove(document, mouseevents.end, activeMouseend);
+	}
+
+	function activeTouchmove(e) {
+		var event = e.data.event,
+		    timer = e.data.timer,
+		    touch = changedTouch(e, event);
+
+		if (!touch) { return; }
+
+		// Stop the interface from gesturing
+		e.preventDefault();
+
+		event.targetTouches = e.targetTouches;
+		e.data.touch = touch;
+		e.data.timeStamp = e.timeStamp;
+		timer.kick();
+	}
+
+	function activeTouchend(e) {
+		var event = e.data.event,
+		    timer = e.data.timer,
+		    touch = identifiedTouch(e.changedTouches, event.identifier);
+
+		// This isn't the touch you're looking for.
+		if (!touch) { return; }
+
+		removeActiveTouch(event);
+		endEvent(event, timer);
+	}
+
+	function removeActiveTouch(event) {
+		remove(document, '.' + event.identifier, activeTouchmove);
+		remove(document, '.' + event.identifier, activeTouchend);
+	}
+
+
+	// Logic for triggering move and moveend events
+
+	function updateEvent(event, touch, timeStamp, timer) {
+		var time = timeStamp - event.timeStamp;
+
+		event.type = 'move';
+		event.distX =  touch.pageX - event.startX;
+		event.distY =  touch.pageY - event.startY;
+		event.deltaX = touch.pageX - event.pageX;
+		event.deltaY = touch.pageY - event.pageY;
+		
+		// Average the velocity of the last few events using a decay
+		// curve to even out spurious jumps in values.
+		event.velocityX = 0.3 * event.velocityX + 0.7 * event.deltaX / time;
+		event.velocityY = 0.3 * event.velocityY + 0.7 * event.deltaY / time;
+		event.pageX =  touch.pageX;
+		event.pageY =  touch.pageY;
+	}
+
+	function endEvent(event, timer, fn) {
+		timer.end(function(){
+			event.type = 'moveend';
+
+			trigger(event.target, event);
+			
+			return fn && fn();
+		});
+	}
+
+
+	// jQuery special event definition
+
+	function setup(data, namespaces, eventHandle) {
+		// Stop the node from being dragged
+		//add(this, 'dragstart.move drag.move', preventDefault);
+		
+		// Prevent text selection and touch interface scrolling
+		//add(this, 'mousedown.move', preventIgnoreTags);
+		
+		// Tell movestart default handler that we've handled this
+		add(this, 'movestart.move', flagAsHandled);
+
+		// Don't bind to the DOM. For speed.
+		return true;
+	}
+	
+	function teardown(namespaces) {
+		remove(this, 'dragstart drag', preventDefault);
+		remove(this, 'mousedown touchstart', preventIgnoreTags);
+		remove(this, 'movestart', flagAsHandled);
+		
+		// Don't bind to the DOM. For speed.
+		return true;
+	}
+	
+	function addMethod(handleObj) {
+		// We're not interested in preventing defaults for handlers that
+		// come from internal move or moveend bindings
+		if (handleObj.namespace === "move" || handleObj.namespace === "moveend") {
+			return;
+		}
+		
+		// Stop the node from being dragged
+		add(this, 'dragstart.' + handleObj.guid + ' drag.' + handleObj.guid, preventDefault, undefined, handleObj.selector);
+		
+		// Prevent text selection and touch interface scrolling
+		add(this, 'mousedown.' + handleObj.guid, preventIgnoreTags, undefined, handleObj.selector);
+	}
+	
+	function removeMethod(handleObj) {
+		if (handleObj.namespace === "move" || handleObj.namespace === "moveend") {
+			return;
+		}
+		
+		remove(this, 'dragstart.' + handleObj.guid + ' drag.' + handleObj.guid);
+		remove(this, 'mousedown.' + handleObj.guid);
+	}
+	
+	jQuery.event.special.movestart = {
+		setup: setup,
+		teardown: teardown,
+		add: addMethod,
+		remove: removeMethod,
+
+		_default: function(e) {
+			var event, data;
+			
+			// If no move events were bound to any ancestors of this
+			// target, high tail it out of here.
+			if (!e._handled()) { return; }
+
+			function update(time) {
+				updateEvent(event, data.touch, data.timeStamp);
+				trigger(e.target, event);
+			}
+
+			event = {
+				target: e.target,
+				startX: e.startX,
+				startY: e.startY,
+				pageX: e.pageX,
+				pageY: e.pageY,
+				distX: e.distX,
+				distY: e.distY,
+				deltaX: e.deltaX,
+				deltaY: e.deltaY,
+				velocityX: e.velocityX,
+				velocityY: e.velocityY,
+				timeStamp: e.timeStamp,
+				identifier: e.identifier,
+				targetTouches: e.targetTouches,
+				finger: e.finger
+			};
+
+			data = {
+				event: event,
+				timer: new Timer(update),
+				touch: undefined,
+				timeStamp: undefined
+			};
+			
+			if (e.identifier === undefined) {
+				// We're dealing with a mouse
+				// Stop clicks from propagating during a move
+				add(e.target, 'click', returnFalse);
+				add(document, mouseevents.move, activeMousemove, data);
+				add(document, mouseevents.end, activeMouseend, data);
+			}
+			else {
+				// We're dealing with a touch. Stop touchmove doing
+				// anything defaulty.
+				e._preventTouchmoveDefault();
+				add(document, touchevents.move + '.' + e.identifier, activeTouchmove, data);
+				add(document, touchevents.end + '.' + e.identifier, activeTouchend, data);
+			}
+		}
+	};
+
+	jQuery.event.special.move = {
+		setup: function() {
+			// Bind a noop to movestart. Why? It's the movestart
+			// setup that decides whether other move events are fired.
+			add(this, 'movestart.move', jQuery.noop);
+		},
+		
+		teardown: function() {
+			remove(this, 'movestart.move', jQuery.noop);
+		}
+	};
+	
+	jQuery.event.special.moveend = {
+		setup: function() {
+			// Bind a noop to movestart. Why? It's the movestart
+			// setup that decides whether other move events are fired.
+			add(this, 'movestart.moveend', jQuery.noop);
+		},
+		
+		teardown: function() {
+			remove(this, 'movestart.moveend', jQuery.noop);
+		}
+	};
+
+	add(document, 'mousedown.move', mousedown);
+	add(document, 'touchstart.move', touchstart);
+
+	// Make jQuery copy touch event properties over to the jQuery event
+	// object, if they are not already listed. But only do the ones we
+	// really need. IE7/8 do not have Array#indexOf(), but nor do they
+	// have touch events, so let's assume we can ignore them.
+	if (typeof Array.prototype.indexOf === 'function') {
+		(function(jQuery, undefined){
+			var props = ["changedTouches", "targetTouches"],
+			    l = props.length;
+			
+			while (l--) {
+				if (jQuery.event.props.indexOf(props[l]) === -1) {
+					jQuery.event.props.push(props[l]);
+				}
+			}
+		})(jQuery);
+	};
+});
+(function($){
+
+  $.fn.twentytwenty = function(options) {
+    var options = $.extend({default_offset_pct: 0.5, orientation: 'horizontal'}, options);
+    return this.each(function() {
+
+      var sliderPct = options.default_offset_pct;
+      var container = $(this);
+      var sliderOrientation = options.orientation;
+      var beforeDirection = (sliderOrientation === 'vertical') ? 'down' : 'left';
+      var afterDirection = (sliderOrientation === 'vertical') ? 'up' : 'right';
+      
+      
+      container.wrap("<div class='twentytwenty-wrapper twentytwenty-" + sliderOrientation + "'></div>");
+      container.append("<div class='twentytwenty-overlay'></div>");
+      var beforeImg = container.find("img:first");
+      var afterImg = container.find("img:last");
+      container.append("<div class='twentytwenty-handle'></div>");
+      var slider = container.find(".twentytwenty-handle");
+      slider.append("<span class='twentytwenty-" + beforeDirection + "-arrow'></span>");
+      slider.append("<span class='twentytwenty-" + afterDirection + "-arrow'></span>");
+      container.addClass("twentytwenty-container");
+      beforeImg.addClass("twentytwenty-before");
+      afterImg.addClass("twentytwenty-after");
+      
+      var overlay = container.find(".twentytwenty-overlay");
+      overlay.append("<div class='twentytwenty-before-label'></div>");
+      overlay.append("<div class='twentytwenty-after-label'></div>");
+
+      var calcOffset = function(dimensionPct) {
+        var w = beforeImg.width();
+        var h = beforeImg.height();
+        return {
+          w: w+"px",
+          h: h+"px",
+          cw: (dimensionPct*w)+"px",
+          ch: (dimensionPct*h)+"px"
+        };
+      };
+
+      var adjustContainer = function(offset) {
+      	if (sliderOrientation === 'vertical') {
+      	  beforeImg.css("clip", "rect(0,"+offset.w+","+offset.ch+",0)");
+      	}
+      	else {
+          beforeImg.css("clip", "rect(0,"+offset.cw+","+offset.h+",0)");
+    	}
+        container.css("height", offset.h);
+      };
+
+      var adjustSlider = function(pct) {
+        var offset = calcOffset(pct);
+        slider.css((sliderOrientation==="vertical") ? "top" : "left", (sliderOrientation==="vertical") ? offset.ch : offset.cw);
+        adjustContainer(offset);
+      }
+
+      $(window).on("resize.twentytwenty", function(e) {
+        adjustSlider(sliderPct);
+      });
+
+      var offsetX = 0;
+      var imgWidth = 0;
+      
+      slider.on("movestart", function(e) {
+        if (((e.distX > e.distY && e.distX < -e.distY) || (e.distX < e.distY && e.distX > -e.distY)) && sliderOrientation !== 'vertical') {
+          e.preventDefault();
+        }
+        else if (((e.distX < e.distY && e.distX < -e.distY) || (e.distX > e.distY && e.distX > -e.distY)) && sliderOrientation === 'vertical') {
+          e.preventDefault();
+        }
+        container.addClass("active");
+        offsetX = container.offset().left;
+        offsetY = container.offset().top;
+        imgWidth = beforeImg.width(); 
+        imgHeight = beforeImg.height();          
+      });
+
+      slider.on("moveend", function(e) {
+        container.removeClass("active");
+      });
+
+      slider.on("move", function(e) {
+        if (container.hasClass("active")) {
+          sliderPct = (sliderOrientation === 'vertical') ? (e.pageY-offsetY)/imgHeight : (e.pageX-offsetX)/imgWidth;
+          if (sliderPct < 0) {
+            sliderPct = 0;
+          }
+          if (sliderPct > 1) {
+            sliderPct = 1;
+          }
+          adjustSlider(sliderPct);
+        }
+      });
+
+      container.find("img").on("mousedown", function(event) {
+        event.preventDefault();
+      });
+
+      $(window).trigger("resize.twentytwenty");
+    });
+  };
+
+})(jQuery);
+var SlideLine = function($el, options) {
+	var slideLine = this;
+
+	defaults = {
+		ratio: 1
+	}
+
+	slideLine.options = $.extend({}, defaults, options)
+
+	slideLine.$el = $el;
+	slideLine.$children = slideLine.$el.find('li');
+	slideLine.$box = slideLine.$el.closest('.slider');
+	if (!slideLine.$box.length) {
+		slideLine.$box = $('body');
+	}
+
+	$(window).on('resize', slideLine.init.bind(slideLine));
+
+	setInterval(function() {
+		window.requestAnimationFrame(slideLine.draw.bind(slideLine))
+	}, 1);
+
+	slideLine.init();
+};
+
+SlideLine.prototype.init = function() {
+	var slideLine = this;
+
+	slideLine.width = 0;
+	slideLine.offset = this.$box.offset().top;
+	slideLine.viewport = {
+		height: window.innerHeight,
+		width: window.innerWidth
+	};
+
+	slideLine.trigger = slideLine.offset - slideLine.viewport.height / 2;
+	///// Триггер равен отступу контейнера до верха страницы минус высота вьюпорта поделенная на два
+
+
+	// slideLine.$children.each(function(){
+	//   slideLine.width += $(this).outerWidth(true);
+	// });
+	slideLine.width = slideLine.$el.width();
+
+	slideLine.maxShift = slideLine.width - slideLine.$box.width();
+	///// максимальный сдвиг равен ширине слайдлайна минус ширина body
+
+	// slideLine.$el.css({
+	//   width: slideLine.width
+	// });
+	//
+};
+
+SlideLine.prototype.draw = function() {
+	var slideLine = this;
+	var position = window.pageYOffset;
+	var shift = ((position - slideLine.trigger) * slideLine.options.ratio).toFixed();
+			// Сдвиг равен верхнему отступу от страницы минус значение триггера результат помноженный на ратио
+
+	if (shift < 0) shift = 0;
+	if (shift > slideLine.maxShift) shift = slideLine.maxShift;
+
+	// if (shift !== slideLine.lastShift) {
+		slideLine.$el.css({
+			transform: 'translate3d(-' + shift + 'px, 0, 0)'
+		})
+
+		slideLine.lastShift = shift;
+	// }
+};
+
+$.fn.slideLine = function(options) {
+	$(this).each(function() {
+		new SlideLine($(this), options);
+	});
+};
+
+$(document).ready(function(){
+
+
+	$('.switcher').each(function(){
+
+		var _picEl = $(this),
+			_switchEl = $(this).find('.switchNav'),
+			_switchers =  $(this).find('.switch');
+
+		_switchers.click(function(){
+			
+			var thisEl = $(this);
+			if(thisEl.hasClass('.active')) {return;}
+
+			_switchEl.find('.active').removeClass('active');
+			thisEl.addClass('active ');
+
+			var oldLayout = _picEl.find('.switchSelected');
+			oldLayout.removeClass('switchSelected');
+
+			var id = thisEl.attr('id').split('for_')[1];
+			var newLayout = jQuery('#' + id);
+			newLayout.addClass('switchSelected');
+
+			console.log('ok');
+
+		});
+
+	});
+	
+});
+$(document).ready(function(){
+
+	(function($) {
+
+		$('.header__sandwich').click(function(e){
+			e.preventDefault();
+			$('.header__nav').toggleClass('header__nav--expanded');
+			$('body').toggleClass('darkenSite');
+		});
+	
+		$('.site-cache').click(function(e){
+			$('.header__nav').removeClass('header__nav--expanded');
+			$('body').removeClass('darkenSite');
+		});
+
+		$('.header').hover(function(e){
+			
+			$('.header__next').addClass('headerHover');
+		}, function(){
+			$('.header__next').removeClass('headerHover');
+		});
+
+	})(jQuery);
+
+});
+
+
+
+$(function() {
+    $("img.lazy").lazyload({
+    	threshold : 400
+    });
+});

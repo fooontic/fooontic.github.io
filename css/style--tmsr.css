@@ -15,7 +15,7 @@ div[class*="column"] {
 }
 
 
-.row {    
+.row-tmsr {    
 
 	margin-left: -12px;  
 	margin-right: -12px;
@@ -26,10 +26,10 @@ div[class*="column"] {
 and (min-device-width : 768px) 
 and (max-device-width : 1024px) 
 and (orientation : landscape) {
-	.row { margin: 0;}
+	.row-tmsr { margin: 0;}
 }
 
-.row:after,.clearfix:after {
+.row-tmsr:after,.clearfix:after {
 
 	content: " ";
 	display: block;
@@ -415,22 +415,26 @@ button {
 	line-height: 16px;
 	color: #14648c;
 	width: 130px;
+	font-size: 14px;
 }
 
-.terminals__pin:hover{
+.terminals__pin:hover, .terminals__pin:focus{
 	opacity: .8;
+	text-decoration: none;
+	color: #14648c;
+	outline: none;
 }
 
 .terminals__pin--kronstadt{ 
-	top: 170px;
+	top: 184px;
 	left: 105px;
 }
 .terminals__pin--gorskaya{ 
-	top: 38px;
+	top: 52px;
 	left: 456px;
 }
 .terminals__pin--lisiy-nos{ 
-	top: 106px;
+	top: 120px;
 	left: 456px;
 }
 
@@ -630,18 +634,18 @@ and (orientation : landscape) {
 
 }
 
-.mail:before{
-	content: "";
-	position: absolute;
-	top: 35px;
-	left: -75px;
-	background-image: url(../img/spritesheet.png);
-    background-repeat: no-repeat;
-    display: block;
-	width: 46px;
-    height: 46px;
-    background-position: -80px -5px;
-}
+// .mail:before{
+// 	content: "";
+// 	position: absolute;
+// 	top: 35px;
+// 	left: -75px;
+// 	background-image: url(../img/spritesheet.png);
+//     background-repeat: no-repeat;
+//     display: block;
+// 	width: 46px;
+//     height: 46px;
+//     background-position: -80px -5px;
+// }
 
 .mobile:before{
 	content: "";
