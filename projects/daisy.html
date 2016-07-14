@@ -218,11 +218,14 @@
     // WOW Animation ////////////////////////////////
     new WOW().init();
     // Slider /////////////////////////////////////
-    $(function()
+    $(document).ready(function()
     {
-      $('.slide-line').slideLine(
+      $(function()
       {
-        ratio: 0.99
+        $('.slide-line').slideLine(
+        {
+          ratio: 0.99
+        });
       });
     });
     $(document).ready(function()
