@@ -217,6 +217,14 @@
   <script>
     // WOW Animation ////////////////////////////////
     new WOW().init();
+    // Slider /////////////////////////////////////
+    $(function()
+    {
+      $('.slide-line').slideLine(
+      {
+        ratio: 0.99
+      });
+    });
     $(document).ready(function()
     {
       // We need to turn it into a function.
@@ -306,21 +314,13 @@
                 }
               })
             }
-            $('.daisy-subheader').objFadeOut(10);
+            $('.daisy-subheader').objFadeOut(120);
           }
         }
         // Set the function to resize
       $(window).resize(ravenous);
       // Call the function
       ravenous();
-    });
-    // Slider /////////////////////////////////////
-    $(function()
-    {
-      $('.slide-line').slideLine(
-      {
-        ratio: 0.99
-      });
     });
   </script>
 </body>
